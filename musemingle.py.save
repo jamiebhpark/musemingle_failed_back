@@ -36,18 +36,10 @@ def create_app():
 
     from s3_manager import s3_manager_bp
     app.register_blueprint(s3_manager_bp)
-
-    from google_auth import google_auth_bp
-    app.register_blueprint(google_auth_bp)
-
-    from apple_auth import apple_auth_bp
-    app.register_blueprint(apple_auth_bp)
-
-    from facebook_auth import facebook_auth_bp
-    app.register_blueprint(facebook_auth_bp)
-
-
+app.register_blueprint(s3_manager_bp)
     @app.route('/')
+
+
     def hello_world():
         return 'Hello, World!'
 

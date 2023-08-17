@@ -1,5 +1,8 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from musemingle import db
+from werkzeug.utils import secure_filename
+from s3_manager import s3
+import os
 
 exhibitions_bp = Blueprint('exhibitions', __name__)
 
@@ -13,51 +16,70 @@ class Exhibitions(db.Model):
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.Enum('upcoming', 'ongoing', 'ended'))
-    poster_image = db.Column(db.String(255))
+    poster_image = db.Column(db.String(255)) # S3 key for the poster image
     created_at = db.Column(db.TIMESTAMP, server_default=db.text('CURRENT_TIMESTAMP'))
     updated_at = db.Column(db.TIMESTAMP, server_default=db.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))
 
 @exhibitions_bp.route('/exhibitions', methods=['GET'])
-#@app.route('/exhibitions', methods=['GET'])
 def get_exhibitions():
     exhibitions = Exhibitions.query.all()
     return jsonify([exhibition.as_dict() for exhibition in exhibitions])
 
-@exhibitions_bp.route('/exhibitions', methods=['POST'])
-#@app.route('/exhibitions', methods=['POST'])
-def create_exhibition():
-    # TODO: Data validation
-    new_exhibition = Exhibitions(**request.json)
-    db.session.add(new_exhibition)
-    db.session.commit()
-    return jsonify(new_exhibition.as_dict()), 201
-
-@exhibitions_bp.route('/exhibitions/<int:exhibition_id>', methods=['GET'])
-#@app.route('/exhibitions/<int:exhibition_id>', methods=['GET'])
-def get_exhibition(exhibition_id):
+@exhibitions_bp.route('/exhibitions/<int:exhibition_id>/poster_image', methods=['GET'])
+def get_poster_image(exhibition_id):
     exhibition = Exhibitions.query.get_or_404(exhibition_id)
-    return jsonify(exhibition.as_dict())
+    poster_image_key = exhibition.poster_image
+
+    # Download poster image from S3
+    file_obj = s3.get_object(Bucket='musemingle-app-images', Key=f'exhibitions/{poster_image_key}')
+    return send_file(file_obj['Body'], mimetype='image/jpeg')
+
+@exhibitions_bp.route('/exhibitions', methods=['POST'])
+def create_exhibition():
+    data = request.json
+    exhibition = Exhibitions(**data)
+    db.session.add(exhibition)
+    db.session.commit()
+
+    # Assuming the poster image is sent as a file
+    poster_image = request.files['poster_image']
+    if poster_image:
+        filename = secure_filename(poster_image.filename)
+        s3.put_object(Bucket='musemingle-app-images', Key=f'exhibitions/{filename}', Body=poster_image)
+        exhibition.poster_image = filename
+        db.session.commit()
+
+    return jsonify(exhibition.as_dict()), 201
 
 @exhibitions_bp.route('/exhibitions/<int:exhibition_id>', methods=['PUT'])
-#@app.route('/exhibitions/<int:exhibition_id>', methods=['PUT'])
 def update_exhibition(exhibition_id):
     exhibition = Exhibitions.query.get_or_404(exhibition_id)
-    # TODO: Data validation and update
+    data = request.json
+    for key, value in data.items():
+        setattr(exhibition, key, value)
+
+    poster_image = request.files.get('poster_image')
+    if poster_image:
+        filename = secure_filename(poster_image.filename)
+        s3.put_object(Bucket='musemingle-app-images', Key=f'exhibitions/{filename}', Body=poster_image)
+        exhibition.poster_image = filename
+
     db.session.commit()
     return jsonify(exhibition.as_dict())
 
 @exhibitions_bp.route('/exhibitions/<int:exhibition_id>', methods=['DELETE'])
-#@app.route('/exhibitions/<int:exhibition_id>', methods=['DELETE'])
 def delete_exhibition(exhibition_id):
     exhibition = Exhibitions.query.get_or_404(exhibition_id)
+    
+    # Deleting the poster image from S3
+    if exhibition.poster_image:
+        s3.delete_object(Bucket='musemingle-app-images', Key=f'exhibitions/{exhibition.poster_image}')
+
     db.session.delete(exhibition)
     db.session.commit()
     return '', 204
 
-# Helper method to serialize the Exhibitions object
 def as_dict(self):
     return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
-    return {c.name: getattr(self, c.name) for c in self.__table__.columns}
-# Add this method to the Exhibitions class
 Exhibitions.as_dict = as_dict
