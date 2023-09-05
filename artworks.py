@@ -7,14 +7,16 @@ from s3_manager import s3
 artworks_bp = Blueprint('artworks', __name__)
 
 class Artworks(db.Model):
-    __tablename__ = 'Artworks'
+    __tablename__ = 'artworks'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    artist_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
-    artist_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     creation_date = db.Column(db.Date, nullable=True)
     price = db.Column(db.Numeric(10, 2), nullable=True)
     image = db.Column(db.String(255), nullable=True)
+    is_featured = db.Column(db.Boolean, default=False)
+    category_name = db.Column(db.String(255))
     created_at = db.Column(db.TIMESTAMP, server_default=db.text('CURRENT_TIMESTAMP'))
     updated_at = db.Column(db.TIMESTAMP, server_default=db.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))
 

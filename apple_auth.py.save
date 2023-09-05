@@ -1,9 +1,9 @@
+import os
 from flask import Blueprint, request, jsonify, current_app, g
 import jwt
 import requests
 import json
 import base64
-import os
 from users import Users
 from authentication_methods import AuthenticationMethods
 from musemingle import db
@@ -12,10 +12,31 @@ from jwt.algorithms import RSAAlgorithm
 
 apple_auth_bp = Blueprint('apple_auth', __name__)
 
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError("No SECRET_KEY set for JWT token")
+
+@apple_auth_bp.before_request
+def authenticate_request():
+    # /auth/apple 엔드포인트는 이 함수를 건너뜁니다.
+    if request.endpoint == 'apple_auth.authenticate_apple':
+        return
+
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify(status="failure", error="No token provided"), 401
+
+    try:
+        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        g.user = Users.query.filter_by(id=decoded_token['user_id']).first()
+    except jwt.ExpiredSignatureError:
+        return jsonify(error="Token has expired"), 401
+    except jwt.InvalidTokenError as e:
+        return jsonify(error=f"Invalid token: {str(e)}"), 401
+
 @apple_auth_bp.route('/auth/apple', methods=['POST'])
 def authenticate_apple():
-    current_app.logger.info(request.json) #로그로 출력
-
+    print(request.json)  # 요청 내용을 로그로 출력
     try:
         token = request.json.get('id_token')
         if not token:
@@ -39,9 +60,8 @@ def authenticate_apple():
         audience = current_app.config.get('APPLE_AUDIENCE', 'manager.musemingle')
         decoded_token = jwt.decode(token, public_key, algorithms=['RS256'], audience=audience)
 
-        user_sub = decoded_token['sub']
-        user = Users.query.filter_by(apple_sub=user_sub).first()  # Changed from email to apple_sub
-        print(decoded_token)
+        user_email = decoded_token['email']
+        user = Users.query.filter_by(email=user_email).first()
 
         subscription = Subscriptions.query.filter_by(role='artist', subscription_type='free').first()
         if subscription is None:
@@ -50,7 +70,7 @@ def authenticate_apple():
             db.session.commit()
 
         if not user:
-            new_user = Users(email=decoded_token['email'], apple_sub=user_sub, role='artist', subscription_id=subscription.id)
+            new_user = Users(email=user_email, role='artist', subscription_id=subscription.id)
             db.session.add(new_user)
             db.session.commit()
             user = new_user
@@ -58,21 +78,46 @@ def authenticate_apple():
         auth_method = AuthenticationMethods.query.filter_by(user_id=user.id, method='apple').first()
 
         if not auth_method:
-            new_auth_method = AuthenticationMethods(user_id=user.id, method='apple', details=user_sub)  # Changed from decoded_token['sub'] to user_sub
+            new_auth_method = AuthenticationMethods(user_id=user.id, method='apple', details=decoded_token['sub'])
             db.session.add(new_auth_method)
             db.session.commit()
 
+        payload = {
+            'email': user.email
+        }
+        user_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256').decode('utf-8')
 
-        return jsonify(status="success", message="Successfully authenticated with Apple"), 200
+        return jsonify(status="success", user=user.as_dict(), token=user_token), 200
+
+        return jsonify(status="success", user=user.as_dict()), 200
+    except requests.RequestException as e:
+        return jsonify(error=f"Error fetching Apple public keys: {str(e)}"), 500
+    except jwt.ExpiredSignatureError:
+        return jsonify(error="Token has expired"), 401
+    except jwt.InvalidTokenError as e:
+        return jsonify(error=f"Invalid token: {str(e)}"), 401
+    except Exception as e:
+        return jsonify(error=str(e)), 400
+
+@apple_auth_bp.route('/auth/validateToken', methods=['POST'])
+def validate_token():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify(status="failure", error="No token provided"), 401
+
+    try:
+        # 토큰 디코딩 및 검증
+        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user = Users.query.filter_by(id=decoded_token['user_id']).first()
+        if not user:
+            return jsonify(status="failure", error="User not found"), 401
+
+        return jsonify(status="success", message="Token is valid", user_id=decoded_token['user_id']), 200
 
     except jwt.ExpiredSignatureError:
         return jsonify(status="failure", error="Token has expired"), 401
     except jwt.InvalidTokenError as e:
-        current_app.logger.error(f"Invalid token: {str(e)}")
         return jsonify(status="failure", error=f"Invalid token: {str(e)}"), 401
-    except Exception as e:
-        current_app.logger.error(str(e))
-        return jsonify(status="failure", error=str(e)), 400
 
 
 @apple_auth_bp.route('/apple/notifications', methods=['POST'])

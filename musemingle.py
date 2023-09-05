@@ -2,9 +2,12 @@
 
 from flask import Flask
 from database import db, init_db
+from flask_migrate import Migrate
+#import logging
 
 def create_app():
     app = Flask(__name__)
+   # logging.basicConfig(filename='error.log', level=logging.DEBUG)
     init_db(app)
 
     from exhibitions import exhibitions_bp
@@ -13,17 +16,8 @@ def create_app():
     from artworks import artworks_bp
     app.register_blueprint(artworks_bp)
 
-    from categories import categories_bp
-    app.register_blueprint(categories_bp)
-
-    from profiles import profiles_bp
-    app.register_blueprint(profiles_bp)
-
     from users import users_bp
     app.register_blueprint(users_bp)
-
-    from artwork_categories import artwork_categories_bp
-    app.register_blueprint(artwork_categories_bp)
 
     from authentication_methods import authentication_methods_bp
     app.register_blueprint(authentication_methods_bp)
@@ -31,8 +25,8 @@ def create_app():
     from galleries import galleries_bp
     app.register_blueprint(galleries_bp)
 
-    from subscription_fees import subscription_fees_bp
-    app.register_blueprint(subscription_fees_bp)
+    from subscriptions import subscriptions_bp
+    app.register_blueprint(subscriptions_bp)
 
     from s3_manager import s3_manager_bp
     app.register_blueprint(s3_manager_bp)
@@ -46,6 +40,7 @@ def create_app():
     from facebook_auth import facebook_auth_bp
     app.register_blueprint(facebook_auth_bp)
 
+    migrate = Migrate(app, db)
 
     @app.route('/')
     def hello_world():

@@ -7,10 +7,10 @@ import os
 exhibitions_bp = Blueprint('exhibitions', __name__)
 
 class Exhibitions(db.Model):
-    __tablename__ = 'Exhibitions'
+    __tablename__ = 'exhibitions'
     __table_args__ = {'extend_existing': True}
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    gallery_id = db.Column(db.Integer, db.ForeignKey('galleries.id'))
+    gallery_id = db.Column(db.Integer, db.ForeignKey('galleries.id'), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
     start_date = db.Column(db.Date, nullable=False)

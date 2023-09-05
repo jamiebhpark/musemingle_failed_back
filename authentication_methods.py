@@ -4,12 +4,11 @@ from musemingle import db
 authentication_methods_bp = Blueprint('authentication_methods', __name__)
 
 class AuthenticationMethods(db.Model):
-    __tablename__ = 'AuthenticationMethods'
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
+    __tablename__ = 'authentication_methods'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     method = db.Column(db.Enum('facebook', 'google', 'apple', 'email'), nullable=False)
     details = db.Column(db.String(255))
-    created_at = db.Column(db.TIMESTAMP, server_default=db.text('CURRENT_TIMESTAMP'))
-    updated_at = db.Column(db.TIMESTAMP, server_default=db.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))
 
 @authentication_methods_bp.route('/auth-methods', methods=['GET'])
 def get_authentication_methods():
@@ -24,9 +23,9 @@ def create_authentication_method():
     db.session.commit()
     return jsonify(new_method.as_dict()), 201
 
-@authentication_methods_bp.route('/auth-methods/<int:user_id>', methods=['DELETE'])
-def delete_authentication_method(user_id):
-    method = AuthenticationMethods.query.get_or_404(user_id)
+@authentication_methods_bp.route('/auth-methods/<int:method_id>', methods=['DELETE'])
+def delete_authentication_method(method_id):
+    method = AuthenticationMethods.query.get_or_404(method_id)
     db.session.delete(method)
     db.session.commit()
     return '', 204
